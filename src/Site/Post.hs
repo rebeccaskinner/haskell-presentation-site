@@ -1,12 +1,14 @@
-module Site.Post (SitePost) where
+module Site.Post where
 import Data.Text
 import Text.JSON
+import Text.Printf
 import Database.HDBC
 import Database.HDBC.Sqlite3
 
-type SitePost = Post
+newtype PostPK = PostPK Int
 
-data Post = Post { postTitle :: Text
+data Post = Post { postPrimaryKey :: PostPK
+                   postTitle :: Text
                  , postContent :: Text
                  , postUpvotes :: Int
                  , postDownvotes:: Int
@@ -38,4 +40,8 @@ downvotePost p = p { postDownvotes = (succ . postDownvotes) p }
 postScore :: Post -> Int
 postScore p = postUpvotes p - postDownvotes p
 
--- writePostToDatabase :: (IConnection c) => c ->
+postInsertStr :: String
+postInsertStr = "insert into post (rowid, title, content, upvote, downvote) values (?, ?, ?, ?, ?)"
+
+postQueryStr :: String
+postQueryStr = "select rowid, * from post"
