@@ -1,0 +1,53 @@
+\documentclass{beamer}
+\usefonttheme[onlymath]{serif}
+
+\title{Creating a Website in Haskell}
+\subtitle{ \small{With Scotty and SQLite}}
+\author{Rebecca Skinner}
+\institute{Haskell User Group St. Louis}
+\date{\today}
+\mode<presentation> {\usetheme{Madrid}}
+
+\usepackage[english]{babel}
+\usepackage[latin1]{inputenc}
+\usepackage{times}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{csquotes}
+\usepackage{verbatim}
+
+% CenturyLink Green
+\usecolortheme[RGB={102,0,204}]{structure}
+
+\definecolor{comment}{rgb}{0,0.6,0}
+\definecolor{keyword}{rgb}{0,0,0.6}
+\definecolor{string}{rgb}{0.58,0,0.82}
+
+\lstset{
+  backgroundcolor=\color{white},
+  basicstyle=\tiny,
+  keywordstyle=\color{keyword},
+  commentstyle=\color{comment},
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  stringstyle=\color{string},
+  tabsize=4
+}
+
+\newcommand{\chref}[3] {
+  {\color{#1} \href{#2}{\underline{#3}}}
+}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage{}
+\end{frame}
+
+\section{Haskell Web Frameworks}
+
+\end{document}
