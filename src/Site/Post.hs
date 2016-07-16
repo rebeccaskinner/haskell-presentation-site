@@ -3,6 +3,7 @@ module Site.Post where
 import GHC.Generics
 import Data.Text (Text)
 import Data.Aeson
+import Data.List (find)
 import Data.Maybe (catMaybes, fromMaybe)
 import Control.Monad
 import Database.HDBC
@@ -36,11 +37,11 @@ instance FromJSON Post where
                          v .: "downvotes"
   parseJSON _ = mzero
 
-upvotePost :: Post -> Post
-upvotePost p = p { postUpvotes = (succ . postUpvotes) p }
+upvotePost' :: Post -> Post
+upvotePost' p = p { postUpvotes = (succ . postUpvotes) p }
 
-downvotePost :: Post -> Post
-downvotePost p = p { postDownvotes = (succ . postDownvotes) p }
+downvotePost' :: Post -> Post
+downvotePost' p = p { postDownvotes = (succ . postDownvotes) p }
 
 postScore :: Post -> Int
 postScore p = postUpvotes p - postDownvotes p
@@ -50,6 +51,9 @@ postInsertStr = "insert into post (title, content, upvotes, downvotes) values (?
 
 postQueryStr :: String
 postQueryStr = "select rowid, title, content, upvotes, downvotes from post"
+
+postUpdateStr :: String
+postUpdateStr = "update post set upvotes = ?, downvotes = ? where rowid = ?"
 
 parsePostResults :: [[SqlValue]] -> [Post]
 parsePostResults = (catMaybes $) . (map parsePost)
@@ -74,9 +78,25 @@ createPost title content up down conn =
     _ <- quickQuery' c postInsertStr prepared
     (fromSql . head . head) <$> quickQuery' c "select last_insert_rowid()" []
 
+updatePostInDB :: IConnection c => c -> Post -> IO ()
+updatePostInDB conn post =
+  let rowid = postID post
+      upvotes = postUpvotes post
+      downvotes = postDownvotes post
+      params = [toSql upvotes, toSql downvotes, toSql rowid]
+  in void $ quickQuery' conn postUpdateStr params
+
+upvotePost :: IConnection c => c -> Post -> IO Post
+upvotePost conn p = let p' = upvotePost' p in updatePostInDB conn p' >> return p'
+
+downvotePost :: IConnection c => c -> Post -> IO Post
+downvotePost conn p = let p' = downvotePost' p in updatePostInDB conn p' >> return p'
 
 getPosts :: IConnection c => c -> IO [Post]
 getPosts conn = parsePostResults <$> quickQuery' conn postQueryStr []
+
+postByID :: IConnection c => c -> PostPK -> IO (Maybe Post)
+postByID c k = find (\p -> k == postID p) <$> (getPosts c)
 
 mkPost :: IConnection c => c -> Text -> Text -> Maybe Int -> Maybe Int -> IO Post
 mkPost conn title content upvotes downvotes =
