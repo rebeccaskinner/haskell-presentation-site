@@ -1,35 +1,42 @@
+{-# LANGUAGE MultiParamTypeClasses, DeriveGeneric #-}
 module Site.Post where
-import Data.Text
-import Text.JSON
+import GHC.Generics
+import Data.Text (Text)
+import Data.Aeson
+import Data.Monoid
+import Control.Monad
 import Text.Printf
 import Database.HDBC
 import Database.HDBC.Sqlite3
+import Data.Convertible
 
-newtype PostPK = PostPK Int
+type PostPK = Int
 
-data Post = Post { postPrimaryKey :: PostPK
-                   postTitle :: Text
+data Post = Post { postID :: PostPK
+                 , postTitle :: Text
                  , postContent :: Text
                  , postUpvotes :: Int
                  , postDownvotes:: Int
-                 } deriving (Eq, Show)
+                 } deriving (Generic, Eq, Show)
 
-instance JSON Post where
-  showJSON (Post title contents upvotes downvotes) =
-    (showJSON . toJSObject) $ [ ("title", showJSON title)
-                              , ("content", showJSON contents)
-                              , ("upvotes", showJSON upvotes)
-                              , ("downvotes", showJSON downvotes)
-                              ]
+instance ToJSON Post where
+  toJSON (Post id title content upvotes downvotes) =
+    object ["id" .= id
+           , "title" .= title
+           , "content" .= content
+           , "upvotes" .= upvotes
+           , "downvotes" .= downvotes
+           ]
 
-  readJSON (JSObject obj) =
-    Post <$> getField "title"
-         <*> getField "content"
-         <*> getField "upvotes"
-         <*> getField "downvotes"
-    where
-      getField :: (JSON a) => String -> Result a
-      getField = (`valFromObj` obj)
+
+instance FromJSON Post where
+  parseJSON (Object v) = Post <$>
+                         v .: "id" <*>
+                         v .: "title" <*>
+                         v .: "content" <*>
+                         v .: "upvotes" <*>
+                         v .: "downvotes"
+  parseJSON _ = mzero
 
 upvotePost :: Post -> Post
 upvotePost p = p { postUpvotes = (succ . postUpvotes) p }
@@ -45,3 +52,17 @@ postInsertStr = "insert into post (rowid, title, content, upvote, downvote) valu
 
 postQueryStr :: String
 postQueryStr = "select rowid, * from post"
+
+parsePostResults :: [[SqlValue]] -> [Post]
+parsePostResults = map parsePost
+  where
+    parsePost :: [SqlValue] -> Post
+    parsePost (rowid : title : content : upvote : downvote : []) =
+      Post (fromSql rowid)
+           (fromSql title)
+           (fromSql content)
+           (fromSql upvote)
+           (fromSql downvote)
+
+getPosts :: IConnection c => c -> IO [Post]
+getPosts conn = parsePostResults <$> quickQuery' conn postQueryStr []
