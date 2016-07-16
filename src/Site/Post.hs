@@ -4,11 +4,13 @@ import GHC.Generics
 import Data.Text (Text)
 import Data.Aeson
 import Data.Monoid
+import Data.Maybe (catMaybes)
 import Control.Monad
 import Text.Printf
 import Database.HDBC
 import Database.HDBC.Sqlite3
 import Data.Convertible
+import qualified Debug.Trace as Debug
 
 type PostPK = Int
 
@@ -48,21 +50,23 @@ postScore :: Post -> Int
 postScore p = postUpvotes p - postDownvotes p
 
 postInsertStr :: String
-postInsertStr = "insert into post (rowid, title, content, upvote, downvote) values (?, ?, ?, ?, ?)"
+postInsertStr = "insert into post (rowid, title, content, upvotes, downvotes) values (?, ?, ?, ?, ?)"
 
 postQueryStr :: String
-postQueryStr = "select rowid, * from post"
+postQueryStr = "select rowid, title, content, upvotes, downvotes from post"
 
 parsePostResults :: [[SqlValue]] -> [Post]
-parsePostResults = map parsePost
+parsePostResults = (catMaybes $) . (map parsePost)
   where
-    parsePost :: [SqlValue] -> Post
+    parsePost :: [SqlValue] -> Maybe Post
     parsePost (rowid : title : content : upvote : downvote : []) =
-      Post (fromSql rowid)
-           (fromSql title)
-           (fromSql content)
-           (fromSql upvote)
-           (fromSql downvote)
+      Just $ Post (fromSql rowid)
+                  (fromSql title)
+                  (fromSql content)
+                  (fromSql upvote)
+                  (fromSql downvote)
+    parsePost vals = Debug.traceShow vals Nothing
+
 
 getPosts :: IConnection c => c -> IO [Post]
 getPosts conn = parsePostResults <$> quickQuery' conn postQueryStr []
