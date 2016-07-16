@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, DeriveGeneric #-}
+{-# LANGUAGE MultiParamTypeClasses, DeriveGeneric, BangPatterns #-}
 module Site.Post where
 import GHC.Generics
 import Data.Text (Text)
@@ -7,6 +7,7 @@ import Data.List (find)
 import Data.Maybe (catMaybes, fromMaybe)
 import Control.Monad
 import Database.HDBC
+import System.IO
 import qualified Debug.Trace as Debug
 
 type PostPK = Int
@@ -76,6 +77,7 @@ createPost title content up down conn =
                  ]
   in withTransaction conn $ \c -> do
     _ <- quickQuery' c postInsertStr prepared
+    commit c
     (fromSql . head . head) <$> quickQuery' c "select last_insert_rowid()" []
 
 updatePostInDB :: IConnection c => c -> Post -> IO ()
@@ -84,7 +86,11 @@ updatePostInDB conn post =
       upvotes = postUpvotes post
       downvotes = postDownvotes post
       params = [toSql upvotes, toSql downvotes, toSql rowid]
-  in void $ quickQuery' conn postUpdateStr params
+
+  in do
+    !_ <- quickQuery' conn postUpdateStr params
+    commit conn
+    return ()
 
 upvotePost :: IConnection c => c -> Post -> IO Post
 upvotePost conn p = let p' = upvotePost' p in updatePostInDB conn p' >> return p'
@@ -97,6 +103,24 @@ getPosts conn = parsePostResults <$> quickQuery' conn postQueryStr []
 
 postByID :: IConnection c => c -> PostPK -> IO (Maybe Post)
 postByID c k = find (\p -> k == postID p) <$> (getPosts c)
+
+upvoteByID :: IConnection c => c -> PostPK -> IO (Maybe Post)
+upvoteByID c k = postByID c k >>= \x -> do
+  case x of
+    Just p -> do
+      p' <- upvotePost c p
+      return $ Just p'
+    Nothing ->
+      return Nothing
+
+downvoteByID :: IConnection c => c -> PostPK -> IO (Maybe Post)
+downvoteByID c k = postByID c k >>= \x -> do
+  case x of
+    Just p -> do
+      p' <- downvotePost c p
+      return $ Just p'
+    Nothing ->
+      return Nothing
 
 mkPost :: IConnection c => c -> Text -> Text -> Maybe Int -> Maybe Int -> IO Post
 mkPost conn title content upvotes downvotes =

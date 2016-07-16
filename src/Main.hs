@@ -1,15 +1,18 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, BangPatterns #-}
 
 import Web.Scotty
 import Network.Wai.Middleware.Static
 import System.Environment (getArgs)
 import System.IO
+import System.IO.Unsafe
 import Data.Maybe
 import Data.Char
 import Control.Monad.IO.Class
 import Database.HDBC.Sqlite3
 import Site.Post
 import Network.HTTP.Types
+import Database.HDBC
+import qualified Data.Text.Lazy as T
 
 getDBArg :: IO String
 getDBArg = do
@@ -28,7 +31,7 @@ getDBArg = do
     getDefaultDBPath = do
       return "website"
 
-sqliteConnection = getDBArg >>= connectSqlite3
+sqliteConn = unsafePerformIO $ getDBArg >>= connectSqlite3
 
 includePostContent :: String -> Bool
 includePostContent s = if "true" == (map toLower s) then True else False
@@ -39,10 +42,11 @@ main =
   middleware $ staticPolicy (noDots >-> addBase "static")
 
   get "/" $ file "./static/index.html"
+  get "/submit" $ file "./static/submit.html"
 
   get "/posts" $ do
     includeContents <- (param "include-contents") `rescue` (\_ -> return "false")
-    posts <- liftIO $ sqliteConnection >>= getPosts
+    posts <- liftIO $ getPosts sqliteConn
     if includePostContent includeContents then
       json posts
       else
@@ -50,13 +54,40 @@ main =
 
   get "/posts/:post" $ do
     post <- param "post"
-    p <- liftIO $ sqliteConnection >>= flip postByID post
+    p <- liftIO $ postByID sqliteConn post
     case p of
       Just aPost -> json p
       Nothing -> file "./static/error.html" >>
                  addHeader "Content-Type" "text/html" >>
                  status status404
 
-  get "/:word" $ do
-    beam <- param "word"
-    html $ mconcat ["<h1>Scotty, ", beam, " me up!</h1>"]
+  get "/posts/:post/score" $ do
+    post <- param "post"
+    p <- liftIO $ postByID sqliteConn post
+    case p of
+      Just aPost -> json $ postScore aPost
+      Nothing -> file "./static/error.html" >>
+                 addHeader "Content-Type" "text/html" >>
+                 status status404
+
+  post "/posts/:post" $ do
+    postID <- param "post"
+    act <- param "action" `rescue` (\m -> status status500 >> text "invalid param" >> return "")
+    p <- liftIO $ case map toLower act of
+      "upvote" -> upvoteByID sqliteConn postID
+      "downvote" -> downvoteByID sqliteConn postID
+
+    case p of
+      Just p' -> json p'
+      Nothing -> file "./static/error.html" >>
+                 addHeader "Content-Type" "text/html" >>
+                 status status404
+
+  post "/createpost" $ do
+    title <- (param "title") `rescue` handleBadFormData
+    content <- (param "contents") `rescue` handleBadFormData
+    _ <- liftIO $ mkPost sqliteConn title content Nothing Nothing
+    redirect "/posts?include-contents=true"
+
+    where
+      handleBadFormData _ = status status500 >> return ""
