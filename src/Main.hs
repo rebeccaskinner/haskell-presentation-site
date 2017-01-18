@@ -13,6 +13,7 @@ import Site.Post
 import Network.HTTP.Types
 import Database.HDBC
 import qualified Data.Text.Lazy as T
+import Debug.Trace
 
 getDBArg :: IO String
 getDBArg = do
@@ -76,11 +77,11 @@ main =
     p <- liftIO $ case map toLower act of
       "upvote" -> upvoteByID sqliteConn postID
       "downvote" -> downvoteByID sqliteConn postID
-
+      x ->  trace ("unexpected action: " ++ x) (return Nothing)
     case p of
       Just p' -> json p'
       Nothing -> file "./static/error.html" >>
-                 addHeader "Content-Type" "text/html" >>
+                addHeader "Content-Type" "text/html" >>
                  status status404
 
   post "/createpost" $ do
