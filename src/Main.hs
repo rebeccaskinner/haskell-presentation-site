@@ -37,6 +37,8 @@ sqliteConn = unsafePerformIO $ getDBArg >>= connectSqlite3
 includePostContent :: String -> Bool
 includePostContent s = if "true" == (map toLower s) then True else False
 
+
+
 main :: IO ()
 main =
   scotty 3000 $ do
@@ -80,9 +82,10 @@ main =
       x ->  trace ("unexpected action: " ++ x) (return Nothing)
     case p of
       Just p' -> json p'
-      Nothing -> file "./static/error.html" >>
-                addHeader "Content-Type" "text/html" >>
-                 status status404
+      Nothing -> do
+        file "./static/error.html"
+        addHeader "Content-Type" "text/html"
+        status status500
 
   post "/createpost" $ do
     title <- (param "title") `rescue` handleBadFormData
